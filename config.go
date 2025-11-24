@@ -4,21 +4,24 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"strings"
 	"time"
 )
 
 const usageMessage = "usage: defi [--interval N] [--once] [path|pattern]"
 
 type appConfig struct {
-	spec     watchSpec
-	interval time.Duration
-	once     bool
+	spec         watchSpec
+	interval     time.Duration
+	once         bool
+	compileFlags []string
 }
 
 func parseAppConfig(args []string) (appConfig, string, error) {
 	fs := flag.NewFlagSet("defi", flag.ContinueOnError)
 	intervalFlag := fs.Int("interval", 1, "Polling interval in seconds")
 	onceFlag := fs.Bool("once", false, "Run tests once and exit")
+	compileFlagsFlag := fs.String("compile-flags", "", "Override compiler flags (space-separated)")
 
 	if err := fs.Parse(args); err != nil {
 		return appConfig{}, "", err
@@ -39,9 +42,10 @@ func parseAppConfig(args []string) (appConfig, string, error) {
 	}
 
 	cfg := appConfig{
-		spec:     spec,
-		interval: time.Duration(*intervalFlag) * time.Second,
-		once:     *onceFlag,
+		spec:         spec,
+		interval:     time.Duration(*intervalFlag) * time.Second,
+		once:         *onceFlag,
+		compileFlags: strings.Fields(*compileFlagsFlag),
 	}
 
 	initialPath := ""

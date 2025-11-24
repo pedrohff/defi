@@ -387,7 +387,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.footerSpinning = false
 		m.watchHasFile = true
 
-		return m, startRunnerCmd(msg.path)
+		return m, startRunnerCmd(msg.path, m.cfg.compileFlags)
 	}
 
 	return m, nil
@@ -452,11 +452,11 @@ func requestRunCmd(path string) tea.Cmd {
 	}
 }
 
-func startRunnerCmd(sourcePath string) tea.Cmd {
+func startRunnerCmd(sourcePath string, compileFlags []string) tea.Cmd {
 	return func() tea.Msg {
 		ch := make(chan tea.Msg, 16)
 		go func() {
-			passed, total, err := runWorkflow(sourcePath, func(msg tea.Msg) {
+			passed, total, err := runWorkflow(sourcePath, compileFlags, func(msg tea.Msg) {
 				ch <- msg
 			})
 			ch <- testsDoneMsg{Passed: passed, Total: total, Err: err}

@@ -17,6 +17,10 @@ var supportedLanguages = map[string]string{
 	".cpp": "c++",
 }
 
+var defaultCompileFlags = map[string][]string{
+	".cpp": {"-std=c++11"},
+}
+
 const (
 	compiledBinary    = "defitestprogram"
 	compiledBinaryWin = "defitestprogram.exe"
@@ -57,11 +61,12 @@ type testsDoneMsg struct {
 	Err    error
 }
 
-func runWorkflow(sourcePath string, send func(tea.Msg)) (int, int, error) {
+func runWorkflow(sourcePath string, overrideFlags []string, send func(tea.Msg)) (int, int, error) {
 	var (
-		compiler string
-		cases    []PromptCase
-		total    int
+		compiler     string
+		cases        []PromptCase
+		total        int
+		defaultFlags []string
 	)
 
 	phases := []struct {
@@ -86,6 +91,7 @@ func runWorkflow(sourcePath string, send func(tea.Msg)) (int, int, error) {
 				if !ok {
 					return fmt.Errorf("unsupported file extension %q", ext)
 				}
+				defaultFlags = defaultCompileFlags[ext]
 
 				if _, err := exec.LookPath(compiler); err != nil {
 					return fmt.Errorf("required compiler %q not found in PATH: %w", compiler, err)
@@ -101,7 +107,11 @@ func runWorkflow(sourcePath string, send func(tea.Msg)) (int, int, error) {
 		{
 			name: "🛠️ Compiling",
 			fn: func() error {
-				return compileSource(sourcePath, compiler)
+				flags := defaultFlags
+				if len(overrideFlags) > 0 {
+					flags = overrideFlags
+				}
+				return compileSource(sourcePath, compiler, flags)
 			},
 		},
 		{
@@ -191,8 +201,10 @@ func runWorkflow(sourcePath string, send func(tea.Msg)) (int, int, error) {
 	return passed, total, firstErr
 }
 
-func compileSource(sourcePath, compiler string) error {
-	cmd := exec.Command(compiler, sourcePath, "-o", compiledBinary)
+func compileSource(sourcePath, compiler string, flags []string) error {
+	args := append([]string{}, flags...)
+	args = append(args, sourcePath, "-o", compiledBinary)
+	cmd := exec.Command(compiler, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

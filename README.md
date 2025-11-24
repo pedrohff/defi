@@ -48,6 +48,7 @@ Ideal for CI or quick verification; Défi compiles, executes the test cases once
 |---------------|-----------------------------------------------|---------|
 | `--once`      | Run a single evaluation then exit              | `false` |
 | `--interval`  | Watcher polling cadence in seconds            | `1`     |
+| `--compile-flags` | Override compiler flags (space-separated) | language default |
 
 ## Supported languages
 
@@ -56,6 +57,12 @@ Ideal for CI or quick verification; Défi compiles, executes the test cases once
 | C++      | `.cpp`         | `c++`        |
 
 Language detection drives footer labels and build commands. Extend `supportedLanguages` in `workflow.go` to add more toolchains.
+
+By default, Défi applies per-language compile flags (for example, C++ uses `-std=c++11`). Override them as needed:
+
+```bash
+defi --compile-flags "-std=c++20 -Wall" path/to/myChallenge.cpp
+```
 
 ## Authoring test prompts
 

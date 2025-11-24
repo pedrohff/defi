@@ -89,7 +89,7 @@ func parsePromptBlock(block string) ([]PromptCase, error) {
 			return nil
 		}
 		if len(current.Inputs) == 0 || len(current.Outputs) == 0 {
-			return fmt.Errorf("incomplete prompt case detected")
+			return fmt.Errorf("incomplete prompt case detected: %+v", *current)
 		}
 		cases = append(cases, *current)
 		current = nil
