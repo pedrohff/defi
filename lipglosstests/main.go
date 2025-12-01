@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"github.com/pedrohff/defi/components"
 	"github.com/pedrohff/defi/view"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

@@ -5,7 +5,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/pedrohff/defi/components"
 	"github.com/pedrohff/defi/view"
 )
@@ -23,39 +22,29 @@ type runRequestMsg struct {
 	path string
 }
 
-type uiStyles struct {
-	title     lipgloss.Style
-	accent    lipgloss.Style
-	subtle    lipgloss.Style
-	success   lipgloss.Style
-	failure   lipgloss.Style
-	body      lipgloss.Style
-	helpStyle lipgloss.Style
-}
-
-type testCaseView struct {
-	Name           string
-	Status         string
-	CompileOK      bool
-	AssertionOK    bool
-	Inputs         []string
-	ExpectedOutput string
-	ActualOutput   string
-}
+// Footer status messages displayed in the UI.
+const (
+	statusIdle                = "Idle"
+	statusReadyToRun          = "Ready to run"
+	statusListeningForChanges = "Listening for changes..."
+	statusListeningForFiles   = "Listening for file changes..."
+	statusWaitingForFile      = "Waiting for file..."
+	statusWaitingForFiles     = "Waiting for matching files..."
+	statusNoTestCases         = "No test cases found"
+	statusRunningTests        = "Running tests..."
+	statusPreparingRun        = "Preparing run..."
+)
 
 type model struct {
 	cfg appConfig
 
 	spinner        spinner.Model
-	styles         uiStyles
 	runnerUpdates  <-chan tea.Msg
 	watcherUpdates <-chan tea.Msg
 
 	runnerActive bool
-	runFinished  bool
 
-	activePath  string
-	displayPath string
+	activePath string
 
 	pendingPath string
 	hasPending  bool
@@ -67,70 +56,43 @@ type model struct {
 	height int
 	ready  bool
 
-	phaseName  string
-	phaseIndex int
-	phaseTotal int
-
-	testsStarted bool
-	testsTotal   int
-	testsPassed  int
-	currentTest  int
-	currentState testStatus
-	currentErr   error
-
 	summaryPassed int
 	summaryTotal  int
 	summaryErr    error
 
-	testCases            []testCaseView
+	testCases            []view.TestCaseData
 	selectedIndex        int // -1 means no selection
 	footerStatus         string
 	footerLanguage       string
 	footerFilename       string
-	footerSpinning       bool
 	ignoreInitialWatcher bool
 }
 
 func newModel(cfg appConfig, initialPath string) model {
-	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	sp.Style = lipgloss.NewStyle().Foreground(components.ColorSpinnerAccent)
-
-	styles := uiStyles{
-		title:     lipgloss.NewStyle().Foreground(components.ColorTextPrimary).Bold(true),
-		accent:    lipgloss.NewStyle().Foreground(components.ColorAccentBlue).Bold(true),
-		subtle:    lipgloss.NewStyle().Foreground(components.ColorTextMuted),
-		success:   lipgloss.NewStyle().Foreground(components.ColorSuccess).Bold(true),
-		failure:   lipgloss.NewStyle().Foreground(components.ColorFailure).Bold(true),
-		body:      lipgloss.NewStyle().Foreground(components.ColorTextPrimary),
-		helpStyle: lipgloss.NewStyle().Foreground(components.ColorHelpText),
-	}
-
 	m := model{
 		cfg:           cfg,
-		spinner:       sp,
-		styles:        styles,
+		spinner:       components.NewSpinner(),
 		selectedIndex: -1,
 	}
 
 	if initialPath != "" {
 		m.activePath = initialPath
-		m.displayPath = formatDisplayPath(initialPath)
 		m.watchHasFile = true
 		m.footerLanguage = languageLabelForPath(initialPath)
 		m.footerFilename = footerFilename(initialPath)
 		if cfg.once {
-			m.footerStatus = "Ready to run"
+			m.footerStatus = statusReadyToRun
 		} else {
-			m.footerStatus = "Listening for changes..."
+			m.footerStatus = statusListeningForChanges
 			m.ignoreInitialWatcher = true
 		}
 	}
 
 	if m.footerStatus == "" {
 		if cfg.once {
-			m.footerStatus = "Waiting for file..."
+			m.footerStatus = statusWaitingForFile
 		} else {
-			m.footerStatus = "Waiting for matching files..."
+			m.footerStatus = statusWaitingForFiles
 		}
 	}
 
@@ -140,10 +102,6 @@ func newModel(cfg appConfig, initialPath string) model {
 
 	if m.footerFilename == "" {
 		m.footerFilename = "-"
-	}
-
-	if !cfg.once {
-		m.footerSpinning = true
 	}
 
 	return m
@@ -219,41 +177,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch v := msg.msg.(type) {
 		case phaseMsg:
-			m.phaseName = v.Name
-			m.phaseIndex = v.Index
-			m.phaseTotal = v.Total
 			m.footerStatus = v.Name
-			m.footerSpinning = false
 
 		case testsInitMsg:
-			m.testsStarted = false
-			m.testsTotal = v.Total
-			m.testsPassed = 0
-			m.testCases = make([]testCaseView, v.Total)
+			m.testCases = make([]view.TestCaseData, v.Total)
 			for i := range m.testCases {
-				m.testCases[i] = testCaseView{
-					Name:        fmt.Sprintf("Case %d", i+1),
-					Status:      components.TestCasePending,
-					CompileOK:   false,
-					AssertionOK: false,
+				m.testCases[i] = view.TestCaseData{
+					Name:             fmt.Sprintf("Case %d", i+1),
+					Status:           components.TestCasePending,
+					CompileSuccess:   false,
+					AssertionSuccess: false,
 				}
 			}
 			if v.Total == 0 {
-				m.footerStatus = "No test cases found"
+				m.footerStatus = statusNoTestCases
 			} else {
-				m.footerStatus = "Running tests..."
+				m.footerStatus = statusRunningTests
 			}
-			m.footerSpinning = false
 
 		case testStatusMsg:
-			m.testsStarted = true
-			m.currentTest = v.Current
-			m.testsTotal = v.Total
-			m.testsPassed = v.Passed
-			m.currentState = v.Status
-			m.currentErr = v.Err
-			m.footerSpinning = false
-
 			if idx := v.Current - 1; idx >= 0 && idx < len(m.testCases) {
 				tc := &m.testCases[idx]
 				tc.Inputs = v.Inputs
@@ -262,18 +204,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch v.Status {
 				case testStatusRunning:
 					tc.Status = components.TestCaseRunning
-					tc.CompileOK = false
-					tc.AssertionOK = false
+					tc.CompileSuccess = false
+					tc.AssertionSuccess = false
 					m.footerStatus = fmt.Sprintf("Case %d/%d running", v.Current, v.Total)
 				case testStatusPassed:
 					tc.Status = components.TestCaseFinished
-					tc.CompileOK = v.CompileSuccess
-					tc.AssertionOK = v.AssertionSuccess
+					tc.CompileSuccess = v.CompileSuccess
+					tc.AssertionSuccess = v.AssertionSuccess
 					m.footerStatus = fmt.Sprintf("Case %d/%d passed", v.Current, v.Total)
 				case testStatusFailed:
 					tc.Status = components.TestCaseFinished
-					tc.CompileOK = v.CompileSuccess
-					tc.AssertionOK = v.AssertionSuccess
+					tc.CompileSuccess = v.CompileSuccess
+					tc.AssertionSuccess = v.AssertionSuccess
 					status := "failed"
 					if v.Err != nil {
 						status = fmt.Sprintf("failed: %s", shortenString(v.Err.Error(), 60))
@@ -286,14 +228,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.summaryPassed = v.Passed
 			m.summaryTotal = v.Total
 			m.summaryErr = v.Err
-			m.runFinished = true
 			m.runnerActive = false
-			m.footerSpinning = false
 			if v.Err != nil {
 				m.footerStatus = shortenString(v.Err.Error(), 60)
 			} else if !m.cfg.once {
-				m.footerStatus = "Listening for file changes..."
-				m.footerSpinning = true
+				m.footerStatus = statusListeningForFiles
 			}
 
 			var cmds []tea.Cmd
@@ -334,16 +273,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.watchHasFile = true
 			m.watcherErr = nil
 			m.activePath = v.Path
-			m.displayPath = formatDisplayPath(v.Path)
 			m.footerLanguage = languageLabelForPath(v.Path)
 			m.footerFilename = footerFilename(v.Path)
 			if !m.runnerActive {
 				if m.cfg.once {
-					m.footerStatus = "Ready to run"
-					m.footerSpinning = false
+					m.footerStatus = statusReadyToRun
 				} else {
-					m.footerStatus = "Listening for changes..."
-					m.footerSpinning = true
+					m.footerStatus = statusListeningForChanges
 				}
 			}
 			triggerRun := true
@@ -362,21 +298,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case watchIdleMsg:
 			m.watchHasFile = false
 			if !m.runnerActive {
-				m.displayPath = ""
 				m.footerFilename = "-"
 				m.footerLanguage = "-"
 				if m.cfg.once {
-					m.footerStatus = "Waiting for file..."
-					m.footerSpinning = false
+					m.footerStatus = statusWaitingForFile
 				} else {
-					m.footerStatus = "Waiting for matching files..."
-					m.footerSpinning = true
+					m.footerStatus = statusWaitingForFiles
 				}
 			}
 		case watchErrMsg:
 			m.watcherErr = v.Err
 			m.footerStatus = fmt.Sprintf("Watcher error: %s", shortenString(v.Err.Error(), 40))
-			m.footerSpinning = false
 		}
 
 		cmds = append(cmds, readWatcherUpdateCmd(m.watcherUpdates))
@@ -394,34 +326,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.runnerActive = true
-		m.runFinished = false
-		m.hasPending = false
-		m.pendingPath = ""
-		m.summaryErr = nil
-		m.summaryPassed = 0
-		m.summaryTotal = 0
-		m.testsStarted = false
-		m.testsTotal = 0
-		m.testsPassed = 0
-		m.currentTest = 0
-		m.currentState = ""
-		m.currentErr = nil
-		m.phaseName = ""
-		m.phaseIndex = 0
-		m.phaseTotal = 0
-		m.activePath = msg.path
-		m.displayPath = formatDisplayPath(msg.path)
-		m.footerLanguage = languageLabelForPath(msg.path)
-		m.footerFilename = footerFilename(msg.path)
-		m.footerStatus = "Preparing run..."
-		m.footerSpinning = false
-		m.watchHasFile = true
-
+		m.resetForNewRun(msg.path)
 		return m, startRunnerCmd(msg.path, m.cfg.compileFlags)
 	}
 
 	return m, nil
+}
+
+// resetForNewRun clears all test state and prepares the model for a fresh run.
+func (m *model) resetForNewRun(path string) {
+	// Runner state
+	m.runnerActive = true
+	m.hasPending = false
+	m.pendingPath = ""
+
+	// Previous results
+	m.summaryErr = nil
+	m.summaryPassed = 0
+	m.summaryTotal = 0
+
+	// File info
+	m.activePath = path
+	m.footerLanguage = languageLabelForPath(path)
+	m.footerFilename = footerFilename(path)
+	m.footerStatus = statusPreparingRun
+	m.watchHasFile = true
 }
 
 func (m model) View() string {
@@ -430,29 +359,15 @@ func (m model) View() string {
 	}
 
 	if m.watcherErr != nil {
-		return m.styles.failure.Render("⚠️ " + m.watcherErr.Error())
-	}
-
-	// Convert testCaseView to view.TestCaseData
-	testCases := make([]view.TestCaseData, len(m.testCases))
-	for i, tc := range m.testCases {
-		testCases[i] = view.TestCaseData{
-			Name:             tc.Name,
-			Status:           tc.Status,
-			CompileSuccess:   tc.CompileOK,
-			AssertionSuccess: tc.AssertionOK,
-			Inputs:           tc.Inputs,
-			ExpectedOutput:   tc.ExpectedOutput,
-			ActualOutput:     tc.ActualOutput,
-		}
+		return components.RenderError(m.watcherErr.Error())
 	}
 
 	statusText := m.footerStatus
 	if statusText == "" {
-		statusText = "Idle"
+		statusText = statusIdle
 	}
 
-	mainView := view.NewMainView(m.width, m.height, testCases,
+	mainView := view.NewMainView(m.width, m.height, m.testCases,
 		view.WithSelectedIndex(m.selectedIndex),
 		view.WithFilename(m.footerFilename),
 		view.WithLanguage(m.footerLanguage),

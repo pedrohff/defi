@@ -1,6 +1,9 @@
 package components
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Shared color palette used across Défi components and views.
 const (
@@ -27,3 +30,16 @@ const (
 	ColorDemoWhite      lipgloss.Color = "#FAFAFA"
 	ColorSelectedBg     lipgloss.Color = "#d9d9d9"
 )
+
+// NewSpinner returns a pre-styled spinner using the shared color palette.
+func NewSpinner() spinner.Model {
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	sp.Style = lipgloss.NewStyle().Foreground(ColorSpinnerAccent)
+	return sp
+}
+
+// RenderError formats an error message with failure styling.
+func RenderError(msg string) string {
+	style := lipgloss.NewStyle().Foreground(ColorFailure).Bold(true)
+	return style.Render("⚠️ " + msg)
+}

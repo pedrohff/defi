@@ -28,6 +28,7 @@ var (
 				Background(ColorFilenameBadge).
 				Align(lipgloss.Center).Padding(0, 1)
 )
+
 // Footer composes the footer layout with the current status message.
 func Footer(width int, status string, language string, filename string) string {
 	if len(filename) > 18 {

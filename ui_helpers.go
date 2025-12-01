@@ -6,16 +6,6 @@ import (
 	"strings"
 )
 
-func formatDisplayPath(path string) string {
-	if path == "" {
-		return ""
-	}
-	if rel, err := filepath.Rel(".", path); err == nil {
-		return rel
-	}
-	return path
-}
-
 func languageLabelForPath(path string) string {
 	if path == "" {
 		return "-"
