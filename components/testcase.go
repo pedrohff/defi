@@ -9,14 +9,12 @@ const (
 	TestCaseRunning = "RUNNING"
 	// TestCaseFinished indicates that both compilation and assertions completed.
 	TestCaseFinished = "FINISHED"
-
 	// TestCaseBlockStatusPending renders the block as pending.
 	TestCaseBlockStatusPending = "-"
 	// TestCaseBlockStatusPass renders the block as a successful pass.
 	TestCaseBlockStatusPass = "PASS"
 	// TestCaseBlockStatusFail renders the block as a failure.
 	TestCaseBlockStatusFail = "FAIL"
-
 	// TestCaseBlockSize defines the width reserved for each result block.
 	TestCaseBlockSize = 9
 )
@@ -73,7 +71,7 @@ func TestCaseHeader(width int) string {
 }
 
 // TestCase renders a single test case row with compilation and assertion result blocks.
-func TestCase(width int, name string, status string, compileSuccess bool, assertionSuccess bool) string {
+func TestCase(width int, name string, status string, compileSuccess bool, assertionSuccess bool, isSelected bool) string {
 	testCaseNameStyle := TestCaseNameStylePending
 	compileStyle := TestCaseResultBlockPendingStyle
 	assertionSuccessStyle := TestCaseResultBlockPendingStyle
@@ -104,9 +102,15 @@ func TestCase(width int, name string, status string, compileSuccess bool, assert
 		assertionSuccessStyle = TestCaseResultBlockRunningStyle
 	}
 
+	testCaseNameColumn := testCaseNameStyle.Width(width - (2 * TestCaseBlockSize))
+
+	if isSelected {
+		testCaseNameColumn = testCaseNameColumn.Background(ColorSelectedBg)
+	}
+
 	return lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		testCaseNameStyle.Width(width-(2*TestCaseBlockSize)).Render(name),
+		testCaseNameColumn.Render(name),
 		lipgloss.PlaceHorizontal(TestCaseBlockSize, lipgloss.Center, compileStyle.Render(compileStatus)),
 		lipgloss.PlaceHorizontal(TestCaseBlockSize, lipgloss.Center, assertionSuccessStyle.Render(assertionStatus)),
 	)

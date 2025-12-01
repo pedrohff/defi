@@ -50,6 +50,17 @@ Ideal for CI or quick verification; Défi compiles, executes the test cases once
 | `--interval`  | Watcher polling cadence in seconds            | `1`     |
 | `--compile-flags` | Override compiler flags (space-separated) | language default |
 
+## Keyboard navigation
+
+| Key           | Action                              |
+|---------------|-------------------------------------|
+| `↑` / `k`     | Move selection up                   |
+| `↓` / `j`     | Move selection down                 |
+| `Esc`         | Deselect current test case          |
+| `Ctrl+C`      | Quit                                |
+
+Selecting a test case reveals a details pane with inputs, expected output, and actual output.
+
 ## Supported languages
 
 | Language | File extension | Required CLI |

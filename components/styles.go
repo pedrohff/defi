@@ -25,4 +25,5 @@ const (
 	ColorDemoAccent     lipgloss.Color = "63"
 	ColorDemoPurple     lipgloss.Color = "#7D56F4"
 	ColorDemoWhite      lipgloss.Color = "#FAFAFA"
+	ColorSelectedBg     lipgloss.Color = "#d9d9d9"
 )

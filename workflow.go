@@ -53,6 +53,9 @@ type testStatusMsg struct {
 	Err              error
 	CompileSuccess   bool
 	AssertionSuccess bool
+	Inputs           []string
+	ExpectedOutput   string
+	ActualOutput     string
 }
 
 type testsDoneMsg struct {
@@ -145,10 +148,12 @@ func runWorkflow(sourcePath string, overrideFlags []string, send func(tea.Msg)) 
 	for idx, c := range cases {
 		time.Sleep(time.Millisecond * 100) // Simulate some delay for better UX
 		send(testStatusMsg{
-			Current: idx + 1,
-			Total:   total,
-			Passed:  passed,
-			Status:  testStatusRunning,
+			Current:        idx + 1,
+			Total:          total,
+			Passed:         passed,
+			Status:         testStatusRunning,
+			Inputs:         c.Inputs,
+			ExpectedOutput: strings.Join(c.Outputs, "\n"),
 		})
 
 		outputs, err := runSingleCase(idx, c)
@@ -165,6 +170,9 @@ func runWorkflow(sourcePath string, overrideFlags []string, send func(tea.Msg)) 
 				CompileSuccess:   false,
 				AssertionSuccess: false,
 				Err:              err,
+				Inputs:           c.Inputs,
+				ExpectedOutput:   strings.Join(c.Outputs, "\n"),
+				ActualOutput:     "",
 			})
 			continue
 		}
@@ -182,6 +190,9 @@ func runWorkflow(sourcePath string, overrideFlags []string, send func(tea.Msg)) 
 				CompileSuccess:   true,
 				AssertionSuccess: false,
 				Err:              wrapped,
+				Inputs:           c.Inputs,
+				ExpectedOutput:   strings.Join(c.Outputs, "\n"),
+				ActualOutput:     strings.Join(outputs, "\n"),
 			})
 			continue
 		}
@@ -194,6 +205,9 @@ func runWorkflow(sourcePath string, overrideFlags []string, send func(tea.Msg)) 
 			Status:           testStatusPassed,
 			CompileSuccess:   true,
 			AssertionSuccess: true,
+			Inputs:           c.Inputs,
+			ExpectedOutput:   strings.Join(c.Outputs, "\n"),
+			ActualOutput:     strings.Join(outputs, "\n"),
 		})
 	}
 	time.Sleep(time.Millisecond * 300) // Simulate some delay for better UX

@@ -1,6 +1,10 @@
 package components
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 var (
 	// FooterStatusTabStyle styles the static "STATUS" label in the footer.
@@ -24,9 +28,11 @@ var (
 				Background(ColorFilenameBadge).
 				Align(lipgloss.Center).Padding(0, 1)
 )
-
 // Footer composes the footer layout with the current status message.
 func Footer(width int, status string, language string, filename string) string {
+	if len(filename) > 18 {
+		filename = strings.TrimSpace(filename[:17]) + "…"
+	}
 	return lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		FooterStatusTabStyle.Render("STATUS"),

@@ -2,32 +2,51 @@ package main
 
 import (
 	"fmt"
-
 	"os"
-
-	"github.com/charmbracelet/lipgloss"
 	"github.com/pedrohff/defi/components"
+	"github.com/pedrohff/defi/view"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+type testCaseOption struct {
+	name             string
+	status           string
+	compileSuccess   bool
+	assertionSuccess bool
+	inputs           []string
+	expectedOutput   string
+	actualOutput     string
+}
+
 type model struct {
-	choices  []string         // items on the to-do list
-	cursor   int              // which to-do list item our cursor is pointing at
-	selected map[int]struct{} // which to-do items are selected
-	width    int
-	height   int
+	testCases []testCaseOption // the list of choices
+	cursor    int              // which to-do list item our cursor is pointing at
+	selected  map[int]struct{} // which to-do items are selected
+	width     int
+	height    int
 }
 
 func initialModel() model {
 	return model{
-		// Our to-do list is a grocery list
-		choices: []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
+		// Sample test cases covering various states
+		testCases: []testCaseOption{
+			{"Sample Test Case 1", components.TestCasePending, false, false, []string{"1", "2"}, "3", ""},
+			{"Sample Test Case 2", components.TestCasePending, true, false, []string{"5"}, "10", ""},
+			{"Sample Test Case 3", components.TestCasePending, true, true, []string{"3", "4"}, "7", ""},
+			{"Sample Test Case 4", components.TestCaseRunning, false, false, []string{"10"}, "20", ""},
+			{"Sample Test Case 5", components.TestCaseRunning, true, false, []string{"2", "3"}, "5", ""},
+			{"Sample Test Case 6", components.TestCaseRunning, true, true, []string{"1"}, "1", ""},
+			{"Sample Test Case 7", components.TestCaseFinished, false, false, []string{"8"}, "16", "error: compile failed"},
+			{"Sample Test Case 8", components.TestCaseFinished, true, false, []string{"4", "5"}, "9", "10"},
+			{"Sample Test Case 9", components.TestCaseFinished, true, true, []string{"6", "7"}, "13", "13"},
+		},
 
 		// A map which indicates which choices are selected. We're using
 		// the  map like a mathematical set. The keys refer to the indexes
 		// of the `choices` slice, above.
 		selected: make(map[int]struct{}),
+		cursor:   0,
 	}
 }
 func (m model) Init() tea.Cmd {
@@ -59,7 +78,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// The "down" and "j" keys move the cursor down
 		case "down", "j":
-			if m.cursor < len(m.choices)-1 {
+			if m.cursor < len(m.testCases)-1 {
 				m.cursor++
 			}
 
@@ -72,7 +91,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.selected[m.cursor] = struct{}{}
 			}
+
+		case "esc":
+			m.cursor = -1
 		}
+
 	}
 
 	// Return the updated model to the Bubble Tea runtime for processing.
@@ -81,51 +104,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	// Convert local testCaseOption to view.TestCaseData
+	testCases := make([]view.TestCaseData, len(m.testCases))
+	for i, tc := range m.testCases {
+		testCases[i] = view.TestCaseData{
+			Name:             tc.name,
+			Status:           tc.status,
+			CompileSuccess:   tc.compileSuccess,
+			AssertionSuccess: tc.assertionSuccess,
+			Inputs:           tc.inputs,
+			ExpectedOutput:   tc.expectedOutput,
+			ActualOutput:     tc.actualOutput,
+		}
+	}
 
-	var styleHeader = lipgloss.NewStyle().
-		Foreground(components.ColorWhite).
-		Background(components.ColorSuccess).
-		Width(m.width).
-		Align(lipgloss.Center).Bold(true).Italic(true)
-
-	var styleStatusTitle = lipgloss.NewStyle().
-		Foreground(components.ColorWhite).
-		Background(components.ColorAlert).
-		Align(lipgloss.Center)
-
-	var styleStatusDesc = lipgloss.NewStyle().
-		Foreground(components.ColorMutedAccent).
-		Background(components.ColorSurfaceDark)
-
-	var (
-		headerContent = styleHeader.Render("Défi")
-		mainContent   = ""
-		footerContent = lipgloss.JoinHorizontal(lipgloss.Left,
-			styleStatusTitle.Padding(0, 1).Render("STATUS"),
-			styleStatusDesc.Padding(0, 1).Width(m.width-8).Render("All systems operational"))
+	// Build and render the main view
+	mainView := view.NewMainView(m.width, m.height, testCases,
+		view.WithSelectedIndex(m.cursor),
+		view.WithFilename("somebiglongfilenamefortesting.cpp"),
+		view.WithLanguage("cpp"),
+		view.WithStatus("All systems operational"),
 	)
-	_ = footerContent
 
-	mainContent = lipgloss.JoinVertical(
-		lipgloss.Top,
-		components.TestCaseHeader(m.width),
-		components.TestCase(m.width, "Sample Test Case 1", components.TestCasePending, false, false),
-		components.TestCase(m.width, "Sample Test Case 2", components.TestCasePending, true, false),
-		components.TestCase(m.width, "Sample Test Case 3", components.TestCasePending, true, true),
-		components.TestCase(m.width, "Sample Test Case 4", components.TestCaseRunning, false, false),
-		components.TestCase(m.width, "Sample Test Case 5", components.TestCaseRunning, true, false),
-		components.TestCase(m.width, "Sample Test Case 6", components.TestCaseRunning, true, true),
-		components.TestCase(m.width, "Sample Test Case 7", components.TestCaseFinished, false, false),
-		components.TestCase(m.width, "Sample Test Case 8", components.TestCaseFinished, true, false),
-		components.TestCase(m.width, "Sample Test Case 9", components.TestCaseFinished, true, true),
-	)
-	// Send the UI for rendering
-	return lipgloss.JoinVertical(lipgloss.Top,
-		lipgloss.PlaceHorizontal(m.width, lipgloss.Center, headerContent),
-		lipgloss.PlaceVertical(m.height-2, lipgloss.Left, mainContent),
-		// lipgloss.PlaceHorizontal(m.width, lipgloss.Left, footerContent),
-		components.Footer(m.width, "lets check", "cpp", "somebiglongfilenamefortesting.cpp"),
-	)
+	return mainView.Render()
 }
 
 func main() {
@@ -134,39 +135,4 @@ func main() {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
 	}
-}
-
-func mai2n() {
-	var style = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(components.ColorDemoWhite).
-		Background(components.ColorDemoPurple).
-		PaddingTop(2).
-		PaddingLeft(4).
-		Width(22)
-	_ = style
-	fmt.Println(style.Render("Hello, kitty"))
-
-	var stylenew = lipgloss.NewStyle().
-		SetString("What’s for lunch?").
-		Width(24).
-		Height(3).
-		Foreground(components.ColorDemoAccent)
-	_ = stylenew
-	// fmt.Println(stylenew.Render())
-
-	var styleStatusTitle = lipgloss.NewStyle().
-		Foreground(components.ColorWhite).
-		Background(components.ColorAlert)
-	_ = styleStatusTitle
-
-	var styleStatusDesc = lipgloss.NewStyle().
-		Foreground(components.ColorMutedAccent).
-		Background(components.ColorSurfaceDark)
-
-	output := lipgloss.JoinHorizontal(lipgloss.Top,
-		styleStatusTitle.Render(" STATUS "),
-		styleStatusDesc.Render(" All systems operational "),
-	)
-	fmt.Println(output)
 }

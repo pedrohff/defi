@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/pedrohff/defi/components"
+	"github.com/pedrohff/defi/view"
 )
 
 type runnerStartedMsg struct {
@@ -33,10 +34,13 @@ type uiStyles struct {
 }
 
 type testCaseView struct {
-	Name        string
-	Status      string
-	CompileOK   bool
-	AssertionOK bool
+	Name           string
+	Status         string
+	CompileOK      bool
+	AssertionOK    bool
+	Inputs         []string
+	ExpectedOutput string
+	ActualOutput   string
 }
 
 type model struct {
@@ -79,6 +83,7 @@ type model struct {
 	summaryErr    error
 
 	testCases            []testCaseView
+	selectedIndex        int // -1 means no selection
 	footerStatus         string
 	footerLanguage       string
 	footerFilename       string
@@ -101,9 +106,10 @@ func newModel(cfg appConfig, initialPath string) model {
 	}
 
 	m := model{
-		cfg:     cfg,
-		spinner: sp,
-		styles:  styles,
+		cfg:           cfg,
+		spinner:       sp,
+		styles:        styles,
+		selectedIndex: -1,
 	}
 
 	if initialPath != "" {
@@ -170,8 +176,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		if msg.Type == tea.KeyCtrlC {
+		switch msg.Type {
+		case tea.KeyCtrlC:
 			return m, tea.Quit
+		case tea.KeyUp:
+			if m.selectedIndex > 0 {
+				m.selectedIndex--
+			}
+		case tea.KeyDown:
+			if m.selectedIndex < len(m.testCases)-1 {
+				m.selectedIndex++
+			}
+		case tea.KeyEsc:
+			m.selectedIndex = -1
+		}
+		// Vim-style navigation
+		switch msg.String() {
+		case "k":
+			if m.selectedIndex > 0 {
+				m.selectedIndex--
+			}
+		case "j":
+			if m.selectedIndex < len(m.testCases)-1 {
+				m.selectedIndex++
+			}
 		}
 
 	case spinner.TickMsg:
@@ -228,6 +256,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if idx := v.Current - 1; idx >= 0 && idx < len(m.testCases) {
 				tc := &m.testCases[idx]
+				tc.Inputs = v.Inputs
+				tc.ExpectedOutput = v.ExpectedOutput
+				tc.ActualOutput = v.ActualOutput
 				switch v.Status {
 				case testStatusRunning:
 					tc.Status = components.TestCaseRunning
@@ -398,52 +429,37 @@ func (m model) View() string {
 		return "🚀 Starting Défi...\n"
 	}
 
-	mainContent := ""
-
-	if view := m.renderTestCases(m.width); view != "" {
-		mainContent = view
-	}
-
 	if m.watcherErr != nil {
-		mainContent = m.styles.failure.Render("⚠️ we" + m.watcherErr.Error())
+		return m.styles.failure.Render("⚠️ " + m.watcherErr.Error())
 	}
 
-	descWidth := max(m.width-8-10-20, 10)
+	// Convert testCaseView to view.TestCaseData
+	testCases := make([]view.TestCaseData, len(m.testCases))
+	for i, tc := range m.testCases {
+		testCases[i] = view.TestCaseData{
+			Name:             tc.Name,
+			Status:           tc.Status,
+			CompileSuccess:   tc.CompileOK,
+			AssertionSuccess: tc.AssertionOK,
+			Inputs:           tc.Inputs,
+			ExpectedOutput:   tc.ExpectedOutput,
+			ActualOutput:     tc.ActualOutput,
+		}
+	}
+
 	statusText := m.footerStatus
 	if statusText == "" {
 		statusText = "Idle"
 	}
-	footer := components.Footer(
-		m.width,
-		shortenString(statusText, descWidth),
-		m.footerLanguage,
-		shortenString(m.footerFilename, 40),
+
+	mainView := view.NewMainView(m.width, m.height, testCases,
+		view.WithSelectedIndex(m.selectedIndex),
+		view.WithFilename(m.footerFilename),
+		view.WithLanguage(m.footerLanguage),
+		view.WithStatus(statusText),
 	)
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		components.Header(m.width, "Défi"),
-		lipgloss.PlaceVertical(m.height-3, lipgloss.Left, mainContent),
-		footer,
-	)
-}
-
-func (m model) renderTestCases(width int) string {
-	if len(m.testCases) == 0 {
-		if m.testsTotal == 0 {
-			return m.styles.subtle.Render("🙈 No tests defined")
-		}
-		return ""
-	}
-	rows := []string{components.TestCaseHeader(width)}
-	for i, tc := range m.testCases {
-		name := tc.Name
-		if name == "" {
-			name = fmt.Sprintf("Case %d", i+1)
-		}
-		rows = append(rows, components.TestCase(width, name, tc.Status, tc.CompileOK, tc.AssertionOK))
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+	return mainView.Render()
 }
 
 func requestRunCmd(path string) tea.Cmd {
